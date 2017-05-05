@@ -119,7 +119,10 @@ We teach this as a followup to classic block syntax; once the user is comfortabl
 
 The `<as @foo>` separator is an unusual departure from how HTML normally looks; we can argue that unclosed `<p>` and `<li>` tags are similar spec-compliant HTML syntax, but given that Glimmer doesn't presently parse those, it's fair to say these separators will catch people off guard at first. We should weigh in community response to this to see if there's possible something less jarring.
 
-Other than that, the community is definitely hurting without this feature.
+Also, there are early reports that some editors' auto-indentation logic
+doesn't play nicely with this new syntax, so the various Handlebars
+formatting plugins would probably need to be upgraded to accommodate
+this syntax.
 
 # Alternatives
 
@@ -128,4 +131,35 @@ I'd proposed a JSX-y [attr/component-centric](https://github.com/emberjs/rfcs/pu
 # Unresolved questions
 
 Curly components will need to support `@`-prefixed `@args` to some degree in order to support the proposed named block syntax, but I'm not sure how deep an impact that would have, or whether `@args` will be merged with classic props.
+
+# Considerations for Future RFCs
+
+There's been talk of possibly including named block params as part of
+this RFC. For example:
+
+```hbs
+// x-foo layout.hbs
+{{yield @otherStuff=123 @title="hello"}}
+
+// usage
+{{#x-foo as |@title|}}
+  <h1>{{@title}}</h1>
+{{/x-foo}}
+```
+
+This API lays the foundation for unifying positional/named args that has
+divided the block vs `attr=(component)` API. At some point in the
+future, we might allow an API like this:
+
+```hbs
+// usage
+{{#x-foo @default=(my-cool-header)}}
+```
+
+where `my-cool-header` is a component that accepts `@title` as a param.
+This would provide a path toward block/component unification that would
+provide nice refactoring capabilities, nudge the developer into using
+consistent naming conventions, and not force the developer to
+arbitrarily choose between two similar but incompatible APIs for passing
+chunks of dynamic DOM into a copmonent.
 
