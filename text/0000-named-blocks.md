@@ -14,7 +14,7 @@ The result of this is that Ember developers have this ultra-powerful, compositio
 
 Example:
 
-```hbs
+```html
 {{x-modal headerText=page.title as |c|}}
   <p>Modal Content {{foo}}</p>
   <button onclick={{c.close}}>
@@ -25,7 +25,7 @@ Example:
 
 This works, but the moment you need to render a component in the header (rather than just `headerText`), you end up having to add more config/data/attrs to `x-modal` just to support every one of those overrides, when really you just should be able to pass in another block of DOM to define what the header looks like. The API in this proposal would allow you to express this use case via the following angle-bracket syntax:
 
-```hbs
+```html
 <x-modal>
   <@header as |c|>
     {{page.title}}
@@ -44,7 +44,7 @@ This works, but the moment you need to render a component in the header (rather 
 
 with support for curly components as follows:
 
-```hbs
+```html
 {{x-modal}}
   <@header as |c|>
     {{page.title}}
@@ -78,7 +78,7 @@ Both curly and angle-bracket component invocation syntax will be enhanced
 with a nested syntax for passing multiple blocks into a component. Here
 is what that syntax looks like for angle-bracket / Glimmer components:
 
-```hbs
+```html
 <x-foo>
   <@header>
     Howdy.
@@ -92,7 +92,7 @@ is what that syntax looks like for angle-bracket / Glimmer components:
 
 and for classic curly component invocation syntax:
 
-```hbs
+```html
 {{#x-foo}}
   <@header>
     Howdy.
@@ -119,7 +119,7 @@ passed into a component; in the following example, `<x-foo>` is being
 passed two `@arg`s, a `@title` arg whose value is string `"Hello"`
 and a `@body` arg whose value is a template block:
 
-```hbs
+```html
 <x-foo @title="Hello">
   <@body>
     I am some text.
@@ -141,7 +141,7 @@ We will likely extend the `{{yield}}` syntax to support `{{yield to=@blockName}}
 In addition, the `@`-based syntax enables us to introduce a much
 simpler, cleaner syntax for rendering blocks:
 
-```hbs
+```html
 Render a block:
 {{@blockName}}
 
@@ -153,14 +153,14 @@ One nice thing about this syntax is that it works with any kind of
 "renderable", including simple strings, such that given the following
 layout:
 
-```hbs
+```html
 <div class="modal-header">{{@header}}</div>
 <div class="modal-content">{{@body}}</div>
 ```
 
 the following two invocations are both valid:
 
-```hbs
+```html
 <x-modal @header="Error!">
   <@body>
     Something went wrong.
@@ -208,7 +208,7 @@ The first is that it's still nice to be able to use single block invocation synt
 with a component that accepts multiple blocks. For instance, the
 `<x-modal>` component above could have been written as:
 
-```hbs
+```html
 <x-modal @header="Error!">
   Something went wrong.
 </x-modal>
@@ -216,7 +216,7 @@ with a component that accepts multiple blocks. For instance, the
 
 and then expanded at a later time to
 
-```hbs
+```html
 <x-modal>
   <@header>
     {{fa-icon "error"}}
@@ -234,7 +234,7 @@ newcomers. It implies that you're defining a "default", something to be
 used in the absence of some other definition, but that's very
 misleading. The following would be much more clear:
 
-```hbs
+```html
 <x-modal>
   <@header>
     {{fa-icon "error"}}
@@ -278,6 +278,22 @@ that intends to address similar use cases, so there is some risk of
 introducing an API that doesn't fit in with what the rest of the world
 is doing.
 
+Some syntax highlighters might have trouble with this syntax; all
+the editors I've tried it on look reasonable, but GitHub's Handlebars
+parser isn't too kind:
+
+```hbs
+<x-modal>
+  <@header as |c|>
+    ...
+  </@header>
+
+  <@main as |c|>
+    ...
+  </@main>
+</x-modal>
+```
+
 # Alternatives
 
 I'd proposed a JSX-y [attr/component-centric](https://github.com/emberjs/rfcs/pull/203) syntax for passing what are essentially DOM lambdas, rendered with `{{component}}`. Perhaps we'll add something like that feature in the future, but it's a much less natural enhancement to Ember than named blocks.
@@ -291,7 +307,7 @@ Most unresolved questions have been listed above as "OPEN QUESTION"s.
 There's been talk of possibly including named block params as part of
 this RFC. For example:
 
-```hbs
+```html
 // x-foo layout.hbs
 {{yield @otherStuff=123 @title="hello"}}
 
@@ -305,7 +321,7 @@ This API lays the foundation for unifying positional/named args that has
 divided the block vs `attr=(component)` API. At some point in the
 future, we might allow an API like this:
 
-```hbs
+```html
 // usage
 {{#x-foo @default=(my-cool-header)}}
 ```
