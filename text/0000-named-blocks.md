@@ -23,26 +23,7 @@ Example:
 {{/x-modal}}
 ```
 
-This works, but the moment you need to render a component in the header (rather than just `headerText`), you end up having to add more config/data/attrs to `x-modal` just to support every one of those overrides, when really you just should be able to pass in another block of DOM to define what the header looks like. The API in this proposal would allow you to express this use case via the following angle-bracket syntax:
-
-```html
-<x-modal>
-  <@header as |c|>
-    {{page.title}}
-    {{status-indicator status=status}}
-    {{close-button action=c.close}}
-  </@header>
-
-  <@main as |c|>
-    <p>Modal Content {{foo}}</p>
-    <button onclick={{c.close}}>
-       Close modal
-    </button>
-  </@main>
-</x-modal>
-```
-
-with support for curly components as follows:
+This works, but the moment you need to render a component in the header (rather than just `headerText`), you end up having to add more config/data/attrs to `x-modal` just to support every one of those overrides, when really you just should be able to pass in another block of DOM to define what the header looks like. The API in this proposal would allow you to express this use case via:
 
 ```html
 {{x-modal}}
@@ -59,6 +40,25 @@ with support for curly components as follows:
     </button>
   </@main>
 {{/x-modal}}
+```
+
+and with Glimmer components:
+
+```html
+<x-modal>
+  <@header as |c|>
+    {{page.title}}
+    {{status-indicator status=status}}
+    {{close-button action=c.close}}
+  </@header>
+
+  <@main as |c|>
+    <p>Modal Content {{foo}}</p>
+    <button onclick={{c.close}}>
+       Close modal
+    </button>
+  </@main>
+</x-modal>
 ```
 
 Other RFCs/addons that have attempted to address this:
