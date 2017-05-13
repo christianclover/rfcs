@@ -229,7 +229,7 @@ and then expanded at a later time to
 </x-modal>
 ```
 
-but `<@default>...</@default>` is a really weird name, particularly for
+But `<@default>...</@default>` is a really weird name, particularly for
 newcomers. It implies that you're defining a "default", something to be
 used in the absence of some other definition, but that's very
 misleading. The following would be much more clear:
