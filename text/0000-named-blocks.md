@@ -26,15 +26,19 @@ Example:
 This works, but the moment you need to render a component in the header (rather than just `headerText`), you end up having to add more config/data/attrs to `x-modal` just to support every one of those overrides, when really you just should be able to pass in another block of DOM to define what the header looks like. The API in this proposal would allow you to express this use case via:
 
 ```
-{{x-modal as |c|}}
-  <p>Modal Content {{foo}}</p>
-  <button onclick={{c.close}}>
-     Close modal
-  </button>
-{{as @header |c|}}
-  {{page.title}}
-  {{status-indicator status=status}}
-  {{close-button action=c.close}}
+{{x-modal}}
+  <@header as |c|>
+    {{page.title}}
+    {{status-indicator status=status}}
+    {{close-button action=c.close}}
+  </@header>
+
+  <@main as |c|>
+    <p>Modal Content {{foo}}</p>
+    <button onclick={{c.close}}>
+       Close modal
+    </button>
+  </@main>
 {{/x-modal}}
 ```
 
@@ -49,80 +53,211 @@ Other RFCs/addons that have attempted to address this:
 
 # Detailed design
 
-## Curly + Angle-bracket Syntax
+## Multi-block Syntax
 
-The Glimmer/Handlebars parser will need to be enhanced to support the following curly/angle-bracket syntax (both examples are functionally equivalent):
+Both curly and angle-bracket component invocation syntax will be enhanced
+with a nested syntax for passing multiple blocks into a component. Here
+is what that syntax looks like for angle-bracket / Glimmer components:
 
 ```hbs
-{{#x-foo as |a|}}
-  @default block {{a}}
-{{as @header |h|}}
-  @header block. Referenced via @header in x-foo's layout
-{{as @footer}}
-  @footer block. No block params.
+<x-foo>
+  <@header>
+    Howdy.
+  </@header>
+
+  <@body as |foo|>
+    Body {{foo}}
+  </@body>
+</x-modal>
+```
+
+and for classic curly component invocation syntax:
+
+```hbs
+{{#x-foo}}
+  <@header>
+    Howdy.
+  </@header>
+
+  <@body as |foo|>
+    Body {{foo}}
+  </@body>
 {{/x-foo}}
-
-{{#x-foo as @header |h}}
-  @header block.
-  This invocation of x-foo omits the @default block.
-{{/x-foo}}
 ```
+
+As demonstrated above, the _nested_ syntax for both curly and
+angle-bracket multi-block syntax has the format `<@blockName>...</@blockName>`.
+This multi-block syntax cannot be mixed with other syntaxes; either ALL
+the nested "children" of a component invocation need to be
+`<@blockName>...</@blockName>` (multi-block syntax), or none of them do
+(classic single-block syntax). The presence of any non-whitespace
+character between or around `<@blockName>...</@blockName>`s is a
+compile-time error.
+
+The purpose of the `<@blockName>...</@blockName>` syntax is to
+hint/remind/reinforce that in this new model, blocks are just `@arg`s
+passed into a component; in the following example, `<x-foo>` is being
+passed two `@arg`s, a `@title` arg whose value is string `"Hello"`
+and a `@body` arg whose value is a template block:
 
 ```hbs
-<x-foo as |a|>
-  @default block {{a}}
-<as @header |h|>
-  Header block. Referenced via @header in x-foo's layout
-<as @footer>
-  @footer block. No block params.
-</x-foo>
-
-<x-foo as @header |h|>
-  @header block.
-  This invocation of x-foo omits the @default block.
+<x-foo @title="Hello">
+  <@body>
+    I am some text.
+  <@body>
 </x-foo>
 ```
 
-## Blocks as `@arg`s
+The `@arg` syntax itself was developed as part of the Glimmer API to
+distinguish data being passed to a component from attributes being
+set on a root HTML element. This RFC marks the introduction of the `@arg` syntax
+to classic curly components, but we haven't yet fleshed out how fully
+we want to merge `@arg` semantics into the world of classic curly components; this
+is one of the major challenges that remain with this RFC.
 
-Presently, blocks passed to templates exist in their own namespace, separate from properties that might also be passed into a component. This RFC proposes that blocks are passed in as any other argument passed to a component. We're using the `@`-prefixed args syntax introduced by Glimmer, even for classic curly components.
+### Rendering Blocks
 
-Two results of this is that it's trivial to forward a block to an inner component, and that you don't need to use `hasBlock` to check if a block was provided, e.g.
+We will likely extend the `{{yield}}` syntax to support `{{yield to=@blockName}}`.
+
+In addition, the `@`-based syntax enables us to introduce a much
+simpler, cleaner syntax for rendering blocks:
 
 ```hbs
-// components/x-modal.hbs
-{{#if @header}}
-  {{fancy-header @default=@header}}
-{{/if}}
+Render a block:
+{{@blockName}}
+
+Render a block with block params:
+{{@blockName 1 2 3}}
 ```
 
-## Yielding to a named block
+One nice thing about this syntax is that it works with any kind of
+"renderable", including simple strings, such that given the following
+layout:
 
+```hbs
+<div class="modal-header">{{@header}}</div>
+<div class="modal-content">{{@body}}</div>
 ```
-{{yield data to=@header}}
-{{yield data to=@footer}}
+
+the following two invocations are both valid:
+
+```hbs
+<x-modal @header="Error!">
+  <@body>
+    Something went wrong.
+  </@body>
+</x-modal>
+
+<x-modal>
+  <@header>
+    {{fa-icon "error"}}
+    Error!
+  </@header>
+
+  <@body>
+    Something went wrong.
+  </@body>
+</x-modal>
 ```
 
-## `{{else}}`, and `@default/@else`
+This helps to unify the syntax for rendering dynamic values to DOM
+and supports a common workflow where string args can be promoted
+to full-on blocks without having to rework the component code
+to support an alternative/parallel API.
 
-`{{else}}` is sugar for `{{as @else}}`. The classic `{{else}}` syntax will not be expanded to support block params; if you want block params use `{{as @else |a b c|}}`.
+OPEN QUESTION: how should we handle `{{@header some blockparam data}}`
+when `@header` is a non-"callable", simple value like a string? Should
+we loudly error? Should it just ignore those "extra" args and render
+the string without a fuss? There are arguments on both sides, but we
+need to decide what our policy on quiet/soft-failures is, since this
+can lead to frustrating debugging experiences where nothing renders
+and there's no indication in the console as to what went wrong.
 
-The angle-bracket form `<as @else>` or `<as @else |a b c|>` can also be used, but we will _not_ support angle-bracket `<else>` since it might syntactically collide with a future HTML element named `<else>`. This shouldn't be an issue though since curly `{{else}}` can still be used for `{{#if ...}} {{else}} {{/if}}` constructs, and any use cases where `{{else}}` + `{{yield to="inverse"}}` had been used with custom components would be better served by choosing a more fitting name for the block and using `<as ...>`, e.g. `<as @empty>No items to display...`.
+## "default" => @main
 
-That said, `{{else}}` does have the benefit of being a generic, conventional catch-all (even if it is a bit of a stretch for how some components use it), and we'd risk opening the door to addon authors all choosing slightly different names for the same-ish thing.
+Classically, component invocation has only supported passing up to two
+blocks, the "default" block and the "inverse" block. `{{yield}}` expands
+to `{{yield to="default"}}`, and if you want to yield to the
+inverse/else block, you'd do `{{yield to="inverse"}}`.
+
+There should be `@arg` equivalents for "default" and "inverse";
+`@default` and `@inverse` are of course likely candidates, but
+in the long run, we should strongly consider standardizing around `@main`
+rather than `@default`. There are a few reasons for this.
+
+The first is that it's still nice to be able to use single block invocation syntax
+with a component that accepts multiple blocks. For instance, the
+`<x-modal>` component above could have been written as:
+
+```hbs
+<x-modal @header="Error!">
+  Something went wrong.
+</x-modal>
+```
+
+and then expanded at a later time to
+
+```hbs
+<x-modal>
+  <@header>
+    {{fa-icon "error"}}
+    Error!
+  </@header>
+
+  <@default>
+    Something went wrong.
+  </@default>
+</x-modal>
+```
+
+but `<@default>...</@default>` is a really weird name, particularly for
+newcomers. It implies that you're defining a "default", something to be
+used in the absence of some other definition, but that's very
+misleading. The following would be much more clear:
+
+```hbs
+<x-modal>
+  <@header>
+    {{fa-icon "error"}}
+    Error!
+  </@header>
+
+  <@main>
+    Something went wrong.
+  </@main>
+</x-modal>
+```
+
+In this use case, and many others, `@main` is a simply a much more
+accurate description of what you're passing into `x-modal`: the "main",
+central, most important, obvious portion
+of the modal, and, fittingly, the block that gets defined by
+single-block syntax is the "main" block.
+
+The second reason "default" is a poor name is that we might,
+in some future RFC, define a convenience syntax for defining a default
+block to render when none is provided at invocation time, and it'd
+be cumbersome to describe/teach this functionality when there's
+already something called "the default block".
+
+OPEN QUESTION: Should "inverse" be renamed, perhaps to `@else`?
 
 # How We Teach This
 
 We teach this as a followup to classic block syntax; once the user is comfortable with single-block syntax, we can introduce named block syntax for more complex use cases.
 
+We teach that what `<@blockName></@blockName>` syntax really means is
+that we're just passing in an arg named `@blockName`, which is like
+any other arg we might pass into a component, but it happens to point
+to a template block than, say, some simple string value.
+
 # Drawbacks
 
-The `<as @foo>` separator is an unusual departure from how HTML normally looks; we can argue that unclosed `<p>` and `<li>` tags are similar spec-compliant HTML syntax, but given that Glimmer doesn't presently parse those, it's fair to say these separators will catch people off guard at first. We should weigh in community response to this to see if there's possible something less jarring.
-
-Also, there are early reports that some editors' auto-indentation logic
-doesn't play nicely with this new syntax, so the various Handlebars
-formatting plugins would probably need to be upgraded to accommodate
-this syntax.
+This isn't really anything like the
+[WebComponents slot syntax](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/slot)
+that intends to address similar use cases, so there is some risk of
+introducing an API that doesn't fit in with what the rest of the world
+is doing.
 
 # Alternatives
 
@@ -130,7 +265,7 @@ I'd proposed a JSX-y [attr/component-centric](https://github.com/emberjs/rfcs/pu
 
 # Unresolved questions
 
-Curly components will need to support `@`-prefixed `@args` to some degree in order to support the proposed named block syntax, but I'm not sure how deep an impact that would have, or whether `@args` will be merged with classic props.
+Most unresolved questions have been listed above as "OPEN QUESTION"s.
 
 # Considerations for Future RFCs
 
