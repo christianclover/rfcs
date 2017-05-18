@@ -136,9 +136,7 @@ is one of the major challenges that remain with this RFC.
 
 ### Rendering Blocks
 
-We will likely extend the `{{yield}}` syntax to support `{{yield to=@blockName}}`.
-
-In addition, the `@`-based syntax enables us to introduce a much
+The `@`-based syntax enables us to introduce a much
 simpler, cleaner syntax for rendering blocks:
 
 ```html
@@ -184,7 +182,9 @@ and supports a common workflow where string args can be promoted
 to full-on blocks without having to rework the component code
 to support an alternative/parallel API.
 
-OPEN QUESTION: how should we handle `{{@header some blockparam data}}`
+#### OPEN QUESTION: "calling" string args
+
+How should we handle `{{@header some blockparam data}}`
 when `@header` is a non-"callable", simple value like a string? Should
 we loudly error? Should it just ignore those "extra" args and render
 the string without a fuss? There are arguments on both sides, but we
@@ -192,20 +192,59 @@ need to decide what our policy on quiet/soft-failures is, since this
 can lead to frustrating debugging experiences where nothing renders
 and there's no indication in the console as to what went wrong.
 
-## "default" => @main
+#### OPEN QUESTION: block-invocation syntax for {{@arg}}
+
+Since an `@arg` might be a component factory, we need to decide what the
+syntax for rendering `@header` and passing it a template looks like. (A
+real life use case of this is how [ember-power-select let's you pass
+in component factories to override portions of the
+component.](https://github.com/cibernox/ember-power-select/blob/2275fbbc2c8d78c1415b3ecf92c09a4bd8247976/addon/templates/components/power-select/options.hbs#L8-L12))
+
+There are a few candidates thus far:
+
+```
+{{#@group as |a b c|}}
+  ...
+{{/@group}}
+
+{{# @group as |a b c|}}
+  ...
+{{/ @group}}
+
+{{#render @group as |a b c|}}
+  ...
+{{/render}}
+```
+
+`render` looks the nicest, but it would mean resurrecting the `#render`
+helper from the deprecated dead in order to fit this one syntactical
+corner case. It might be alright to just put up with this one ugly
+syntax and punt a nicer alternative (perhaps involving `render`) to a future RFC.
+
+### @main and @else
 
 Classically, component invocation has only supported passing up to two
-blocks, the "default" block and the "inverse" block. `{{yield}}` expands
-to `{{yield to="default"}}`, and if you want to yield to the
-inverse/else block, you'd do `{{yield to="inverse"}}`.
+blocks, the "default" block and the "inverse" block. For the purposes
+of unifying rendering and compositional semantics, these blocks
+will be accessible under the respect arg names `@main` and `@else`.
 
-There should be `@arg` equivalents for "default" and "inverse";
-`@default` and `@inverse` are of course likely candidates, but
-in the long run, we should strongly consider standardizing around `@main`
-rather than `@default`. There are a few reasons for this.
+```hbs
+{{@main}}
+is equivalent to:
+{{yield}}
 
-The first is that it's still nice to be able to use single block invocation syntax
-with a component that accepts multiple blocks. For instance, the
+{{@main 1 2 3}}
+is equivalent to:
+{{yield 1 2 3}}
+
+{{@else}}
+is equivalent to:
+{{yield to="inverse"}}
+```
+
+One beneficial implication of this is a nice story for introducing
+additional blocks to a component invocation that started off using
+single-block syntax.  For instance, the
 `<x-modal>` component above could have been written as:
 
 ```html
@@ -223,43 +262,35 @@ and then expanded at a later time to
     Error!
   </@header>
 
-  <@default>
-    Something went wrong.
-  </@default>
-</x-modal>
-```
-
-But `<@default>...</@default>` is a really weird name, particularly for
-newcomers. It implies that you're defining a "default", something to be
-used in the absence of some other definition, but that's very
-misleading. The following would be much more clear:
-
-```html
-<x-modal>
-  <@header>
-    {{fa-icon "error"}}
-    Error!
-  </@header>
-
   <@main>
     Something went wrong.
   </@main>
 </x-modal>
 ```
 
-In this use case, and many others, `@main` is a simply a much more
-accurate description of what you're passing into `x-modal`: the "main",
-central, most important, obvious portion
-of the modal, and, fittingly, the block that gets defined by
-single-block syntax is the "main" block.
+To demonstrate how deeply this syntax integrates with core/classic Ember features,
+it's worth pointing out the following equivalence (even though no one
+would/should ever do this in practice):
 
-The second reason "default" is a poor name is that we might,
-in some future RFC, define a convenience syntax for defining a default
-block to render when none is provided at invocation time, and it'd
-be cumbersome to describe/teach this functionality when there's
-already something called "the default block".
+```html
+{{#if foo}}
+  True
+{{else}}
+  False
+{{/if}}
 
-OPEN QUESTION: Should "inverse" be renamed, perhaps to `@else`?
+is equivalent to
+
+{{#if foo}}
+  <@main>
+    True
+  </@main>
+
+  <@else>
+    False
+  </@else>
+{{/if}}
+```
 
 # How We Teach This
 
@@ -293,6 +324,76 @@ parser isn't too kind:
   </@main>
 </x-modal>
 ```
+
+### Semantics of @args + {{curly-components}}
+
+Since this RFC is the first to introduce `@arg`s to curly components, we need to decide
+on some basic semantics of integrating these two worlds, particularly in
+regards to how/whether `@arg`s are exposed in JavaScript Component
+definitions (e.g. via `this.get()` or some other means).
+
+One constraint is that since `@main` is the name of the block arg that's
+going to be passed to any component invoked with classic single-block syntax,
+we can't just suddenly start setting the `main` property on everyone's
+component instances, since that would be a breaking change.
+
+The most agreeable rule so far is that `@args` live parallel to the
+"hash" args that get set as properties directly on the component. To
+demonstrate these semantics (with a pathological use case that should
+never happen in practice):
+
+JS
+
+```
+export default Component.extend({
+  bar: 'jsbar',
+});
+```
+
+Layout:
+
+```hbs
+bar={{bar}}
+@bar={{@bar}}
+```
+
+Invocation:
+
+```hbs
+{{x-foo}}
+
+{{x-foo bar="HBSBAR"}}
+
+{{x-foo @bar="HBSBAR"}}
+```
+
+Result:
+
+```
+bar=jsbar
+@bar=
+
+bar=HBSBAR
+@bar=
+
+bar=jsbar
+@bar=HBSBAR
+```
+
+So, while the above demonstrates that `@arg`s will technically be
+supported with curly components, they should only really be used for
+the purpose of rendering multiple blocks, or forwarding a block
+to another component for rendering.
+
+For the time being, there is no way, within a curly
+component's JS class definition, to access `@args`; we may want to add that
+functionality soon, but it is out of scope of this RFC.
+
+Note that it might make sense to move this discussion to the
+[hasBlock.js](https://github.com/emberjs/rfcs/pull/102) RFC, which
+proposes adding a JS API for determining whether a block was provided;
+given that blocks will now be passed in as args, this RFC might be
+better generalized to providing a curly JS API for accessing `@arg`s.
 
 # Alternatives
 
