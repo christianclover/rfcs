@@ -4,7 +4,9 @@
 
 # Summary
 
-Introduce syntax for passing in multiple named template blocks into a component.
+Introduce syntax for passing in multiple named template blocks into a component, and
+unify the rendering syntaxes / semantics for
+blocks/primitives/component-factories passed into a component.
 
 # Motivation
 
@@ -72,6 +74,38 @@ Other RFCs/addons that have attempted to address this:
 
 # Detailed design
 
+## Invocation Syntax is separate from Component type
+
+The features specified in this RFC require us to nail down
+some specifics as to how Ember and
+Glimmer components interop, which syntaxes can be used to render
+them, and the mental/teaching model behind how it all works.
+
+- Invocation Syntax (curly vs angle brackets) is conceptually separate from Component
+  type (Ember vs Glimmer component)
+- "Curly Components" is a misnomer since curly syntax can render both Ember
+  components AND Glimmer components
+- Angle-bracket syntax can only render Glimmer components
+- `{{x-foo @k=v}}` will remain invalid curly syntax due to the `@k=v`
+- The way KV pairs provided at invocation is handled depends on the
+  component type:
+  - Given `{{x-foo k=v}}`, Ember Component `x-foo` will assign/bind `v`
+    to property `k` on the component instance, which can be rendered
+    within the component layout template as `{{k}}` (same behavior as always).
+    `{{@k}}` in an Ember component layout will just render nothing (and
+    we should consider making it a syntax error) since `@arg` syntax
+    only means something in Glimmer.
+  - Given `{{x-foo k=v}}`, Glimmer Component `x-foo` treats `k=v` as
+    assigning/binding arg `@k` to `v`; it will assign/bind `this.args.k`, and expose
+    the value as `{{@k}}` within the template. This example invocation
+    is functionally equivalent to `<x-foo @k={{v}} />`
+  - The mental model is that with curly syntax, `k=v` is the syntax
+    for "passing data" to a component; Ember components receive/expose
+    this data via the properties on the component instance, and Glimmer
+    components receive the data as `@arg`s.
+- Curly syntax will not be enhanced with syntax for passing HTML attrs
+  (at this time)
+
 ## Multi-block Syntax
 
 Both curly and angle-bracket component invocation syntax will be enhanced
@@ -113,74 +147,136 @@ the nested "children" of a component invocation need to be
 character between or around `<@blockName>...</@blockName>`s is a
 compile-time error.
 
+### Blocks are just (opaque) data
+
 The purpose of the `<@blockName>...</@blockName>` syntax is to
-hint/remind/reinforce that in this new model, blocks are just `@arg`s
-passed into a component; in the following example, `<x-foo>` is being
-passed two `@arg`s, a `@title` arg whose value is string `"Hello"`
-and a `@body` arg whose value is a template block:
+hint/remind/reinforce that in this new model, blocks are just `arg`s
+passed into a component.
+
+In the above example (with curly syntax), Ember Component `x-foo` would
+have its `header` and `body` properties set on its instance. This means,
+among other things, that there's no need for a
+[hasBlock API for JavaScript](https://github.com/emberjs/rfcs/pull/102);
+you can just use normal property lookup / computed properties / etc to
+determine whether a block is provided. This almost means that blocks can
+be stashed on services and rendered elsewhere, e.g. the
+[ember-elsewhere use case](https://github.com/emberjs/rfcs/pull/226#issuecomment-299949000).
+
+### Unified Renderable Syntax
+
+Rather than continuing to enhance the `{{yield}}` syntax, we should take
+this opportunity to unify the various syntaxes for rendering things,
+from blocks to primitive values to component factories.
+
+We'll use the following example component invocation to explore
+what this syntax looks like: the following (curly syntax) invocation is valid syntax for
+rendering either an Ember.Component or a Glimmer Component named
+`x-modal` and passing it 3 named blocks: `header`, `body`, and `footer`:
 
 ```html
-<x-foo @title="Hello">
-  <@body>
-    I am some text.
-  <@body>
-</x-foo>
-```
-
-The `@arg` syntax itself was developed as part of the Glimmer API to
-distinguish data being passed to a component from attributes being
-set on a root HTML element. This RFC marks the introduction of the `@arg` syntax
-to classic curly components, but we haven't yet fleshed out how fully
-we want to merge `@arg` semantics into the world of classic curly components; this
-is one of the major challenges that remain with this RFC.
-
-### Rendering Blocks
-
-The `@`-based syntax enables us to introduce a much
-simpler, cleaner syntax for rendering blocks:
-
-```html
-Render a block:
-{{@blockName}}
-
-Render a block with block params:
-{{@blockName 1 2 3}}
-```
-
-One nice thing about this syntax is that it works with any kind of
-"renderable", including simple strings, such that given the following
-layout:
-
-```html
-<div class="modal-header">{{@header}}</div>
-<div class="modal-content">{{@body}}</div>
-```
-
-the following two invocations are both valid:
-
-```html
-<x-modal @header="Error!">
-  <@body>
-    Something went wrong.
-  </@body>
-</x-modal>
-
-<x-modal>
-  <@header>
-    {{fa-icon "error"}}
-    Error!
+{{#x-modal}}
+  <@header as |title|>
+    Header {{title}}
   </@header>
 
   <@body>
-    Something went wrong.
+    Body
   </@body>
-</x-modal>
+
+  <@footer>
+    Footer
+  </@footer>
+{{/x-modal}}
 ```
+
+Given the above invocation, here's how you could render these blocks:
+
+```
+{{! within ember-component layout }}
+{{header "ima title"}}
+{{body}}
+{{footer}}
+
+{{! within glimmer-component layout }}
+{{@header "ima title"}}
+{{@body}}
+{{@footer}}
+```
+
+Both of these Ember/Glimmer layouts would render:
+
+```
+Header ima title
+Body
+Footer
+```
+
+The mental modal here is that is that for ECs, named blocks are
+set/bound as a properties on the instance, which we're rendering the
+same way we always rendering properties on the instance. For GCs, blocks
+are just args that we're rendering with the standard @arg syntax
+
+#### Unified Renderable Syntax: primitives
+
+One nice thing about this syntax is that it works with any kind of
+"renderable", including simple strings, such that the following
+invocation for `x-modal` would also be supported:
+
+```html
+{{#x-modal footer="ima footer"}}
+  <@header as |title|>
+    Header {{title}}
+  </@header>
+
+  <@main>
+    Main
+  </@main>
+{{/x-modal}}
+```
+
+In the above invocation, we pass `footer` in as a string rather than a
+block, which still renders just fine with the Unified Renderable syntax.
 
 This helps to unify the syntax for rendering dynamic values to DOM
 and supports a common workflow where string args can be promoted
 to full-on blocks without having to rework the component code
 to support an alternative/parallel API.
+
+#### Unified Renderable Syntax: component factories
+
+The following invocation using component factories is also supported:
+
+```html
+{{#x-modal
+     header=(component 'my-modal-header')
+     footer=(component 'my-modal-footer')}}
+  <@main>
+    Main
+  </@main>
+{{/x-modal}}
+```
+
+This demonstrates that the unified renderable syntax is also capable of
+rendering component factories (previously only renderable via
+`{{component header}}`).
+
+Note since we're passing a positional param `"ima title"` to `header`,
+the `my-modal-header` component would only be able to access that param if it were
+using the `positionalParams` API with (`reopenClass`), which is a bit of
+a clunky / pro-user API.
+
+As a component author, if you want to write your components to support
+passing data to both blocks (which accept positional params) and
+components (which accept KV pairs), you can pass in both formats
+of the same data, e.g.:
+
+```
+// Ember.component layout
+{{header headerTitle title=headerTitle}}
+
+// Glimmer Component layout
+{{@header headerTitle title=headerTitle}}
+```
 
 #### OPEN QUESTION: "calling" string args
 
@@ -192,13 +288,119 @@ need to decide what our policy on quiet/soft-failures is, since this
 can lead to frustrating debugging experiences where nothing renders
 and there's no indication in the console as to what went wrong.
 
-#### OPEN QUESTION: block-invocation syntax for {{@arg}}
+```
+machty:
+I'd personally prefer making the syntax maximally flexible and allowing
+`{{thing 1 2 3 4}}` even when `thing` is a string or undefined, and
+allowing other stricter, type-checking rendering helpers to be
+implemented, or letting some separate RFC define type-checking semantics
+for arguments passed to components (which is something people have been
+asking about for a while). As much as I dislike quiet no-feedback errors in
+Ember, I believe the 99% case occurs when attempting to render something that
+wasn't passed in (or was typo'd on the way in), but rendering a string
+when you expected a block/component-factory/callable is NOT a quiet
+error; you'd see the rendered string and it's hence much easier to tell
+what you did wrong. So, I wouldn't want to neuter the elegant and
+concise unified renderable syntax for this not-really-a-problem corner
+case, nor would I want to have to introduce all of the `is-block` or
+`is-callable` APIs that'd be required if we made the user conditionally
+guard.
+```
 
-Since an `@arg` might be a component factory, we need to decide what the
-syntax for rendering `@header` and passing it a template looks like. (A
-real life use case of this is how [ember-power-select let's you pass
-in component factories to override portions of the
-component.](https://github.com/cibernox/ember-power-select/blob/2275fbbc2c8d78c1415b3ecf92c09a4bd8247976/addon/templates/components/power-select/options.hbs#L8-L12))
+#### Block form of Unified Renderable syntax
+
+It should be possible to pass a block TO the
+block/component-factory that's been passed into a component.
+The common use cases for this are:
+
+##### Passing a block to a component factory
+
+Given the following invocation:
+
+```
+{{x-modal header=(component 'my-header')}}
+```
+
+It should be possible for `x-modal` to pass a block to the `header`
+renderable:
+
+```
+// ember-component x-modal layout
+{{#header title="ima title"}}
+  I'm a block provided by the component layout template.
+{{/header}}
+```
+
+Assuming `my-header` had a layout of:
+
+```
+<div class="my-header-inner">
+  title={{title}}
+  {{yield}}
+</div>
+```
+
+This would render the following (assuming `x-modal` and `my-header` are
+Ember components with `tagName: 'div'` with `classNames` set):
+
+```
+<div class="x-modal">
+  <div class="my-header">
+    <div class="my-header-inner">
+      title=ima title
+      I'm a block provided by the component layout template.
+    </div>
+  </div>
+</div>
+```
+
+##### Passing a block to a block (aka contextual components)
+
+This functionality would require introducing
+[named block params](https://gist.github.com/machty/f3a9867f02258e5c9317a560f557056e)
+as part of this RFC, which on one hand would bloat the scope,
+but on the other hand it fill in the last remaining gap between
+the positional-param block worlds and the KV pair component worlds.
+
+Given the following invocation:
+
+```
+{{#x-modal}}
+  <@header as |@title @main|>
+    <div class="header-block-content">
+      title={{title}}
+      {{main}}
+    </div>
+  </header>
+{{/x-modal}}
+```
+
+This would render the following (assuming the same `x-modal` layout
+as the previous example:
+
+```
+<div class="x-modal">
+  <div class="header-block-content">
+    title=ima title
+    I'm a block provided by the component layout template.
+  </div>
+</div>
+```
+
+It would also be possible to pass a component factory to the header
+block from `x-modal`'s layout:
+
+```
+// ember-component x-modal layout
+{{header title="ima title"
+         main=(component 'x-modal-inner-content')}}
+```
+
+##### Block form of Unified Renderable syntax: OPEN QUESTIONS:
+
+Is the `{{#header}}...{{/header}}` syntax OK?
+
+Also, what does this syntax look like for Glimmer `@arg`s?
 
 There are a few candidates thus far:
 
@@ -221,76 +423,109 @@ helper from the deprecated dead in order to fit this one syntactical
 corner case. It might be alright to just put up with this one ugly
 syntax and punt a nicer alternative (perhaps involving `render`) to a future RFC.
 
-### @main and @else
+### Classic single-block syntax: `main` and `else` args
 
-Classically, component invocation has only supported passing up to two
-blocks, the "default" block and the "inverse" block. For the purposes
-of unifying rendering and compositional semantics, these blocks
-will be accessible under the respect arg names `@main` and `@else`.
+It would be unfortunate if component authors had to use different
+syntaxes for rendering named blocks vs the traditional "default"
+and "inverse" blocks provided by the classic single-block syntax.
 
-```hbs
-{{@main}}
-is equivalent to:
-{{yield}}
+Hence, the blocks provided in classic single-block syntax should also
+be exposed as properties (Ember) and args (Glimmer), and should have
+conventional, meaningful names names: instead of "default" (which is a
+bit misleading) and "inverse", we standardize on `main` and `else`.
 
-{{@main 1 2 3}}
-is equivalent to:
-{{yield 1 2 3}}
+#### Glimmer Components: `@main` and `@else`
 
-{{@else}}
-is equivalent to:
-{{yield to="inverse"}}
+Given Glimmer component invocation:
+
 ```
-
-One beneficial implication of this is a nice story for introducing
-additional blocks to a component invocation that started off using
-single-block syntax.  For instance, the
-`<x-modal>` component above could have been written as:
-
-```html
-<x-modal @header="Error!">
-  Something went wrong.
-</x-modal>
-```
-
-and then expanded at a later time to
-
-```html
-<x-modal>
-  <@header>
-    {{fa-icon "error"}}
-    Error!
-  </@header>
-
-  <@main>
-    Something went wrong.
-  </@main>
-</x-modal>
-```
-
-To demonstrate how deeply this syntax integrates with core/classic Ember features,
-it's worth pointing out the following equivalence (even though no one
-would/should ever do this in practice):
-
-```html
-{{#if foo}}
+{{#fancy-if cond=trueOrFalse}}
   True
 {{else}}
   False
-{{/if}}
+{{/fancy-component}}
+```
 
-is equivalent to
+The component layout could be:
 
-{{#if foo}}
-  <@main>
-    True
-  </@main>
-
-  <@else>
-    False
-  </@else>
+```
+{{#if cond}}
+  {{@main}}
+{{else}}
+  {{@else}}
 {{/if}}
 ```
+
+Note that angle-bracket syntax doesn't support passing in an
+inverse/else block, but the block provided to angle-bracket invocation
+would be passed in as `@main`.
+
+#### Ember Components: `main` and `else`
+
+For Ember, we can't suddenly start setting `main` and `else` properties
+on the component instances as this would be a breaking change, and
+`main` in particular is not an uncommon property name.
+
+We also shouldn't punt on this feature for Ember components for the
+following reasons/use cases:
+
+- [ember-elsewhere](https://github.com/emberjs/rfcs/pull/226#issuecomment-299949000)
+  (and other similar patterns) require having access to the opaque block
+  so that it can be stashed on a service and rendered elsewhere
+- wrapper components that forward args/properties/blocks to another
+  intenal component; blocks need to be accessible as properties in order
+  to pass them into another component (otherwise you'd have to use a
+  combinatoric mess of block syntax + `if hasBlock` checks to forward
+  blocks through to the inner component)
+
+I propose an opt-in API; any Ember Component that wants `main`/`else`
+properties to be set on the component instance need to opt into this
+behavior via something like:
+
+```
+const Component = Ember.Component.extend({
+  blockManager: inject.service(),
+  init() {
+    this._super();
+    this.get('blockManager').registerBlock(this.get('main'));
+  },
+});
+
+Component.reopenClass({
+  enableSingleBlockSyntaxProperties: true
+});
+
+export default Component;
+```
+
+So if `fancy-if` were an Ember component that opted-into
+`enableSingleBlockSyntaxProperties:true`, then
+given the component invocation:
+
+```
+{{#fancy-if cond=trueOrFalse}}
+  True
+{{else}}
+  False
+{{/fancy-component}}
+```
+
+The following ember component layout would work:
+
+```
+{{#if cond}}
+  {{main}}
+{{else}}
+  {{this.else}}
+{{/if}}
+```
+
+##### Alternatives? Nicer opt-in syntax?
+
+The `reopenClass` syntax s clunky, and I wouldn't be surprised if people
+wanted to use unified renderable syntax all over the place. So is there
+a less painful way to opt-in? Could it just be a property set on the
+prototype rather than the class object?
 
 # How We Teach This
 
@@ -302,6 +537,8 @@ any other arg we might pass into a component, but it happens to point
 to a template block than, say, some simple string value.
 
 # Drawbacks
+
+### Not your granddaddy's WC slot syntax
 
 This isn't really anything like the
 [WebComponents slot syntax](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/slot)
@@ -325,75 +562,28 @@ parser isn't too kind:
 </x-modal>
 ```
 
-### Semantics of @args + {{curly-components}}
+### Conditionally passing blocks?
 
-Since this RFC is the first to introduce `@arg`s to curly components, we need to decide
-on some basic semantics of integrating these two worlds, particularly in
-regards to how/whether `@arg`s are exposed in JavaScript Component
-definitions (e.g. via `this.get()` or some other means).
+This RFC does NOT introduce any kind facility for conditionally passing
+blocks, e.g.:
 
-One constraint is that since `@main` is the name of the block arg that's
-going to be passed to any component invoked with classic single-block syntax,
-we can't just suddenly start setting the `main` property on everyone's
-component instances, since that would be a breaking change.
+```html
+{{! this syntax is INVALID! }}
+<x-layout>
+  <@header>...</@header>
+  <@main>...</@main>
 
-The most agreeable rule so far is that `@args` live parallel to the
-"hash" args that get set as properties directly on the component. To
-demonstrate these semantics (with a pathological use case that should
-never happen in practice):
-
-JS
-
-```
-export default Component.extend({
-  bar: 'jsbar',
-});
+  {{#if userCanProceed}}
+    <@footer>
+      {{submit-button}}
+    </@footer>
+  {{/if}}
+</x-layout>
 ```
 
-Layout:
-
-```hbs
-bar={{bar}}
-@bar={{@bar}}
-```
-
-Invocation:
-
-```hbs
-{{x-foo}}
-
-{{x-foo bar="HBSBAR"}}
-
-{{x-foo @bar="HBSBAR"}}
-```
-
-Result:
-
-```
-bar=jsbar
-@bar=
-
-bar=HBSBAR
-@bar=
-
-bar=jsbar
-@bar=HBSBAR
-```
-
-So, while the above demonstrates that `@arg`s will technically be
-supported with curly components, they should only really be used for
-the purpose of rendering multiple blocks, or forwarding a block
-to another component for rendering.
-
-For the time being, there is no way, within a curly
-component's JS class definition, to access `@args`; we may want to add that
-functionality soon, but it is out of scope of this RFC.
-
-Note that it might make sense to move this discussion to the
-[hasBlock.js](https://github.com/emberjs/rfcs/pull/102) RFC, which
-proposes adding a JS API for determining whether a block was provided;
-given that blocks will now be passed in as args, this RFC might be
-better generalized to providing a curly JS API for accessing `@arg`s.
+This might be desirable in the future, particularly for use cases
+involving flex-ish layouts where the component changes behavior /
+appearance based on whether blocks on passed in.
 
 # Alternatives
 
@@ -405,32 +595,41 @@ Most unresolved questions have been listed above as "OPEN QUESTION"s.
 
 # Considerations for Future RFCs
 
-There's been talk of possibly including named block params as part of
-this RFC. For example:
+## Defining Default Blocks
 
-```html
-// x-foo layout.hbs
-{{yield @otherStuff=123 @title="hello"}}
+There's not really a nice way defining default blocks inside your
+component layout (i.e. the block you render when known is provided at
+invocation time), but then again I believe the following would be
+a workable approach that is probably support by the features proposed in
+this RFC?
 
-// usage
-{{#x-foo as |@title|}}
-  <h1>{{@title}}</h1>
-{{/x-foo}}
+```
+{{#with-blocks}}
+  <@mainOrDefault>
+    {{#if main}}
+      {{main}}
+    {{else}}
+      I am the default main block when none is passed in.
+    {{/if}}
+  </@mainOrDefault>
+
+  <@footerOrDefault>
+    {{#if footer}}
+      {{footer}}
+    {{else}}
+      I am the default footer block when none is passed in.
+    {{/if}}
+  </@footerOrDefault>
+
+  <@render as |@mainOrDefault @footerOrDefault|>
+    {{! this specially-named block gets passed all the other blocks above}}
+
+    {{mainOrDefault}}
+    {{footerOrDefault}}
+  </@render>
+{{/with-blocks}}
 ```
 
-This API lays the foundation for unifying positional/named args that has
-divided the block vs `attr=(component)` API. At some point in the
-future, we might allow an API like this:
-
-```html
-// usage
-{{#x-foo @default=(my-cool-header)}}
-```
-
-where `my-cool-header` is a component that accepts `@title` as a param.
-This would provide a path toward block/component unification that would
-provide nice refactoring capabilities, nudge the developer into using
-consistent naming conventions, and not force the developer to
-arbitrarily choose between two similar but incompatible APIs for passing
-chunks of dynamic DOM into a copmonent.
+Either way, it feels hacky and weird and I would be surprised if we'd
+want/need a future RFC to define a nicer way to support default blocks.
 
