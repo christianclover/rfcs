@@ -431,7 +431,7 @@ and "inverse" blocks provided by the classic single-block syntax.
 
 Hence, the blocks provided in classic single-block syntax should also
 be exposed as properties (Ember) and args (Glimmer), and should have
-conventional, meaningful names names: instead of "default" (which is a
+conventional, meaningful names: instead of "default" (which is a
 bit misleading) and "inverse", we standardize on `main` and `else`.
 
 #### Glimmer Components: `@main` and `@else`
