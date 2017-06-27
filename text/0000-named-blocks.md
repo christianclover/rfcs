@@ -546,9 +546,12 @@ that intends to address similar use cases, so there is some risk of
 introducing an API that doesn't fit in with what the rest of the world
 is doing.
 
+### Syntax highlighting changes
+
 Some syntax highlighters might have trouble with this syntax; all
 the editors I've tried it on look reasonable, but GitHub's Handlebars
-parser isn't too kind:
+parser isn't too kind (hence I've been using `html` snippets instead
+of `handlebars` snippets):
 
 ```hbs
 <x-modal>
@@ -564,7 +567,7 @@ parser isn't too kind:
 
 ### Conditionally passing blocks?
 
-This RFC does NOT introduce any kind facility for conditionally passing
+This RFC does NOT introduce any kind of facility for conditionally passing
 blocks, e.g.:
 
 ```html
