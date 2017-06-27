@@ -473,7 +473,7 @@ following reasons/use cases:
   (and other similar patterns) require having access to the opaque block
   so that it can be stashed on a service and rendered elsewhere
 - wrapper components that forward args/properties/blocks to another
-  intenal component; blocks need to be accessible as properties in order
+  internal component; blocks need to be accessible as properties in order
   to pass them into another component (otherwise you'd have to use a
   combinatoric mess of block syntax + `if hasBlock` checks to forward
   blocks through to the inner component)
