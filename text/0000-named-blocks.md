@@ -105,6 +105,7 @@ them, and the mental/teaching model behind how it all works.
     components receive the data as `@arg`s.
 - Curly syntax will not be enhanced with syntax for passing HTML attrs
   (at this time)
+- Angle-bracket syntax does not support passing positional params
 
 ## Multi-block Syntax
 
@@ -307,6 +308,61 @@ case, nor would I want to have to introduce all of the `is-block` or
 guard.
 ```
 
+#### Named block params
+
+Prior to this RFC, there were only two ways to pass in overridable
+chunks of DOM to a component:
+
+- Passing in a block, which only accepts positional block params
+  (or a `(hash)` object of named params)
+- Passing in a component factory, which only accepts KV args (unless
+  you use the `reopenClass-positionalParams` api)
+
+Given that we're introducing a Unified Renderable syntax, it would be
+unfortunate if we did nothing to address this impedance mismatch between
+named and positional params. The goal is for component consumers/invokers to
+be able to pass the most "convenient" kind of Renderable for their use
+case, be it a simple primitive string value, a block if they want the
+lexical scope + block params, or a component factory for rendering
+a shared component that might be used in many places throughout the app.
+Unfortunately, the component author will have to choose whether they
+want to pass positional params (which would push consumers towards
+only using  blocks) or named params (which are presently only supported
+by component factories).
+
+Hence, for this reason (among others), it makes sense to introduce a
+syntax for named block params; with this syntax, there will be an
+organic shift towards component authors using named KV pairs for passing
+data in most cases (while still allowing positional params in certain
+simpler cases were it only really makes sense to use a block, e.g.
+control flow components that wrap `if` or `each`, etc.)
+
+Here is the syntax for named block params:
+
+```html
+{{#x-modal}}
+  <@header as |@title @data|>
+    The title: {{title}}
+    The data: {{data}}
+  </@header>
+{{/x-modal}}
+```
+
+There is also a "soaking" syntax which is useful in cases where nested
+blocks might introduce new named block params that clobber preexisting
+identifiers in the scope, as well as cases where spelling out each
+named block param consumes too much rightward space. The above example
+can be expressed using the soaking syntax as follows:
+
+```html
+{{#x-modal}}
+  <@header as |...@d|>
+    The title: {{d.title}}
+    The data: {{d.data}}
+  </@header>
+{{/x-modal}}
+```
+
 #### Block form of Unified Renderable syntax
 
 It should be possible to pass a block TO the
@@ -356,12 +412,6 @@ Ember components with `tagName: 'div'` with `classNames` set):
 
 ##### Passing a block to a block (aka contextual components)
 
-This functionality would require introducing
-[named block params](https://gist.github.com/machty/f3a9867f02258e5c9317a560f557056e)
-as part of this RFC, which on one hand would bloat the scope,
-but on the other hand it fill in the last remaining gap between
-the positional-param block worlds and the KV pair component worlds.
-
 Given the following invocation:
 
 ```
@@ -394,6 +444,21 @@ block from `x-modal`'s layout:
 // ember-component x-modal layout
 {{header title="ima title"
          main=(component 'x-modal-inner-content')}}
+```
+
+The multi-block syntax can be used as well with Unified Renderable
+syntax:
+
+```
+{{#header}}
+  <@main>
+    I'm a block provided by the component layout template.
+  </@main>
+
+  <@title>
+    ima title
+  </@title>
+{{/header}}
 ```
 
 ##### Block form of Unified Renderable syntax: OPEN QUESTIONS:
