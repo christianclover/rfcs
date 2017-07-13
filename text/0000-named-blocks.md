@@ -92,9 +92,7 @@ them, and the mental/teaching model behind how it all works.
   - Given `{{x-foo k=v}}`, Ember Component `x-foo` will assign/bind `v`
     to property `k` on the component instance, which can be rendered
     within the component layout template as `{{k}}` (same behavior as always).
-    `{{@k}}` in an Ember component layout will just render nothing (and
-    we should consider making it a syntax error) since `@arg` syntax
-    only means something in Glimmer.
+    `{{@k}}` in an Ember component layout will remain a syntax error
   - Given `{{x-foo k=v}}`, Glimmer Component `x-foo` treats `k=v` as
     assigning/binding arg `@k` to `v`; it will assign/bind `this.args.k`, and expose
     the value as `{{@k}}` within the template. This example invocation
@@ -106,6 +104,9 @@ them, and the mental/teaching model behind how it all works.
 - Curly syntax will not be enhanced with syntax for passing HTML attrs
   (at this time)
 - Angle-bracket syntax does not support passing positional params
+
+Implementation-wise, these varying semantics will be defined/implemented via
+[Component Managers](https://github.com/emberjs/rfcs/blob/custom-components/text/0000-custom-components.md#componentmanager).
 
 ## Multi-block Syntax
 
@@ -279,33 +280,20 @@ of the same data, e.g.:
 {{@header headerTitle title=headerTitle}}
 ```
 
-#### OPEN QUESTION: "calling" string args
+#### `maybe-call` built-in
 
-How should we handle `{{@header some blockparam data}}`
-when `@header` is a non-"callable", simple value like a string? Should
-we loudly error? Should it just ignore those "extra" args and render
-the string without a fuss? There are arguments on both sides, but we
-need to decide what our policy on quiet/soft-failures is, since this
-can lead to frustrating debugging experiences where nothing renders
-and there's no indication in the console as to what went wrong.
+_(The name of this built-in helper is open for bikeshedding.)_
+
+If you have `{{header headerTitle}}` in a component layout
+and `header` was passed in as a string, this will cause a run-time
+error given that we'd essentially be "calling" something that isn't a
+helper/method/function/callable. In these cases we would require
+that you must use a built-in, perhaps called `maybe-call`, to flexibly
+render `header` outright if it's a primitive, or pass args to it if
+it is a block/component factory, e.g.
 
 ```
-machty:
-I'd personally prefer making the syntax maximally flexible and allowing
-`{{thing 1 2 3 4}}` even when `thing` is a string or undefined, and
-allowing other stricter, type-checking rendering helpers to be
-implemented, or letting some separate RFC define type-checking semantics
-for arguments passed to components (which is something people have been
-asking about for a while). As much as I dislike quiet no-feedback errors in
-Ember, I believe the 99% case occurs when attempting to render something that
-wasn't passed in (or was typo'd on the way in), but rendering a string
-when you expected a block/component-factory/callable is NOT a quiet
-error; you'd see the rendered string and it's hence much easier to tell
-what you did wrong. So, I wouldn't want to neuter the elegant and
-concise unified renderable syntax for this not-really-a-problem corner
-case, nor would I want to have to introduce all of the `is-block` or
-`is-callable` APIs that'd be required if we made the user conditionally
-guard.
+{{maybe-call header headerTitle}}
 ```
 
 #### Named block params
@@ -543,28 +531,23 @@ following reasons/use cases:
   combinatoric mess of block syntax + `if hasBlock` checks to forward
   blocks through to the inner component)
 
-I propose an opt-in API; any Ember Component that wants `main`/`else`
+So we need an opt-in API; any Ember Component that wants `main`/`else`
 properties to be set on the component instance need to opt into this
-behavior via something like:
+behavior via a mixin provided by Ember:
 
 ```
-const Component = Ember.Component.extend({
+import { ImplicitBlockPropertyMixin } from "@ember/implicit-block-property-support";
+
+export default Ember.Component.extend(ImplicitBlockPropertyMixin, {
   blockManager: inject.service(),
   init() {
     this._super();
     this.get('blockManager').registerBlock(this.get('main'));
   },
 });
-
-Component.reopenClass({
-  enableSingleBlockSyntaxProperties: true
-});
-
-export default Component;
 ```
 
-So if `fancy-if` were an Ember component that opted-into
-`enableSingleBlockSyntaxProperties:true`, then
+So if `fancy-if` were an Ember component that used this mixin, then
 given the component invocation:
 
 ```
@@ -584,13 +567,6 @@ The following ember component layout would work:
   {{this.else}}
 {{/if}}
 ```
-
-##### Alternatives? Nicer opt-in syntax?
-
-The `reopenClass` syntax s clunky, and I wouldn't be surprised if people
-wanted to use unified renderable syntax all over the place. So is there
-a less painful way to opt-in? Could it just be a property set on the
-prototype rather than the class object?
 
 # How We Teach This
 
