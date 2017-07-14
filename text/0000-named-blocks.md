@@ -8,6 +8,11 @@ Introduce syntax for passing in multiple named template blocks into a component,
 unify the rendering syntaxes / semantics for
 blocks/primitives/component-factories passed into a component.
 
+This RFC is focused chiefly on bringing named blocks to Ember Components,
+but it was necessary to define a basic roadmap of functionality for
+Glimmer Components as well, but keep in mind that some of the Glimmer-centric details may
+change and should hence be considered non-normative.
+
 # Motivation
 
 There are limitations to composition due to the inability to pass more than one block to a component (or 2 blocks if you include the inverse block).
@@ -111,22 +116,9 @@ Implementation-wise, these varying semantics will be defined/implemented via
 ## Multi-block Syntax
 
 Both curly and angle-bracket component invocation syntax will be enhanced
-with a nested syntax for passing multiple blocks into a component. Here
-is what that syntax looks like for angle-bracket / Glimmer components:
+with a nested syntax for passing multiple blocks into a component.
 
-```html
-<x-foo>
-  <@header>
-    Howdy.
-  </@header>
-
-  <@body as |foo|>
-    Body {{foo}}
-  </@body>
-</x-modal>
-```
-
-and for classic curly component invocation syntax:
+The syntax for curly invocation is as follows:
 
 ```html
 {{#x-foo}}
@@ -140,6 +132,20 @@ and for classic curly component invocation syntax:
 {{/x-foo}}
 ```
 
+and for angle-bracket invocation:
+
+```html
+<x-foo>
+  <@header>
+    Howdy.
+  </@header>
+
+  <@body as |foo|>
+    Body {{foo}}
+  </@body>
+</x-modal>
+```
+
 As demonstrated above, the _nested_ syntax for both curly and
 angle-bracket multi-block syntax has the format `<@blockName>...</@blockName>`.
 This multi-block syntax cannot be mixed with other syntaxes; either ALL
@@ -151,16 +157,16 @@ compile-time error.
 
 ### Blocks are just (opaque) data
 
-The purpose of the `<@blockName>...</@blockName>` syntax is to
-hint/remind/reinforce that in this new model, blocks are just `arg`s
-passed into a component.
+This RFC introduces the concept that blocks are just opaque values
+passed into components as data, rather than living in what is
+essentially a separate namespace only accessible to `{{yield}}`.
 
 In the above example (with curly syntax), Ember Component `x-foo` would
 have its `header` and `body` properties set on its instance. This means,
 among other things, that there's no need for a
 [hasBlock API for JavaScript](https://github.com/emberjs/rfcs/pull/102);
 you can just use normal property lookup / computed properties / etc to
-determine whether a block is provided. This almost means that blocks can
+determine whether a block is provided. This means that blocks can
 be stashed on services and rendered elsewhere, e.g. the
 [ember-elsewhere use case](https://github.com/emberjs/rfcs/pull/226#issuecomment-299949000).
 
@@ -255,6 +261,17 @@ The following invocation using component factories is also supported:
   <@main>
     Main
   </@main>
+{{/x-modal}}
+```
+
+(It's worth mentioning that since we're only defining the `main` block
+here, this could also be expressed simply as:)
+
+```html
+{{#x-modal
+     header=(component 'my-modal-header')
+     footer=(component 'my-modal-footer')}}
+  Main
 {{/x-modal}}
 ```
 
@@ -579,7 +596,7 @@ to a template block than, say, some simple string value.
 
 # Drawbacks
 
-### Not your granddaddy's WC slot syntax
+### Different from WC slot syntax
 
 This isn't really anything like the
 [WebComponents slot syntax](https://developer.mozilla.org/en-US/docs/Web/HTML/Element/slot)
