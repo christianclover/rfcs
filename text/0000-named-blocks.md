@@ -347,8 +347,8 @@ Here is the syntax for named block params:
 ```html
 {{#x-modal}}
   <@header as |@title @data|>
-    The title: {{title}}
-    The data: {{data}}
+    The title: {{@title}}
+    The data: {{@data}}
   </@header>
 {{/x-modal}}
 ```
@@ -362,8 +362,8 @@ can be expressed using the soaking syntax as follows:
 ```html
 {{#x-modal}}
   <@header as |...@d|>
-    The title: {{d.title}}
-    The data: {{d.data}}
+    The title: {{@d.title}}
+    The data: {{@d.data}}
   </@header>
 {{/x-modal}}
 ```
@@ -423,8 +423,8 @@ Given the following invocation:
 {{#x-modal}}
   <@header as |@title @main|>
     <div class="header-block-content">
-      title is {{title}}
-      {{main}}
+      title is {{@title}}
+      {{@main}}
     </div>
   </header>
 {{/x-modal}}
