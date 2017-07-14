@@ -22,7 +22,7 @@ The result of this is that Ember developers have this ultra-powerful, compositio
 Example:
 
 ```html
-{{x-modal headerText=page.title as |c|}}
+{{#x-modal headerText=page.title as |c|}}
   <p>Modal Content {{foo}}</p>
   <button onclick={{c.close}}>
      Close modal
@@ -33,7 +33,7 @@ Example:
 This works, but the moment you need to render a component in the header (rather than just `headerText`), you end up having to add more config/data/attrs to `x-modal` just to support every one of those overrides, when really you just should be able to pass in another block of DOM to define what the header looks like. The API in this proposal would allow you to express this use case via:
 
 ```html
-{{x-modal}}
+{{#x-modal}}
   <@header as |c|>
     {{page.title}}
     {{status-indicator status=status}}
