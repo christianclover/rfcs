@@ -396,7 +396,7 @@ Assuming `my-header` had a layout of:
 
 ```
 <div class="my-header-inner">
-  title={{title}}
+  title is {{title}}
   {{yield}}
 </div>
 ```
@@ -408,7 +408,7 @@ Ember components with `tagName: 'div'` with `classNames` set):
 <div class="x-modal">
   <div class="my-header">
     <div class="my-header-inner">
-      title=ima title
+      title is ima title
       I'm a block provided by the component layout template.
     </div>
   </div>
@@ -423,7 +423,7 @@ Given the following invocation:
 {{#x-modal}}
   <@header as |@title @main|>
     <div class="header-block-content">
-      title={{title}}
+      title is {{title}}
       {{main}}
     </div>
   </header>
@@ -436,7 +436,7 @@ as the previous example:
 ```
 <div class="x-modal">
   <div class="header-block-content">
-    title=ima title
+    title is ima title
     I'm a block provided by the component layout template.
   </div>
 </div>
