@@ -572,7 +572,7 @@ given the component invocation:
   True
 {{else}}
   False
-{{/fancy-component}}
+{{/fancy-if}}
 ```
 
 The following ember component layout would work:
